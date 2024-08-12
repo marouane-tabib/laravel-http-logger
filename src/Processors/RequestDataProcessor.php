@@ -2,25 +2,33 @@
 
 namespace Chelout\HttpLogger\Processors;
 
+use Monolog\LogRecord;
+
 class RequestDataProcessor
 {
     /**
      * Adds additional request data to the log message.
      *
-     * @return array
+     * @param LogRecord $record
+     * @return LogRecord
      */
-    public function __invoke($record): array
+    public function __invoke(LogRecord $record): LogRecord
     {
-        return array_merge_recursive($record, [
-            'context' => array_filter([
-                'raw' => $this->processContext('raw'),
-                'data' => $this->processContext('data'),
-                'files' => $this->processContext('files'),
-                'headers' => $this->processContext('headers'),
-                'session' => $this->processContext('session'),
-            ]),
-            'extra' => $this->processExtra(),
-        ]);
+        $context = array_merge_recursive(
+            $record->context,
+            [
+                'context' => array_filter([
+                    'raw' => $this->processContext('raw'),
+                    'data' => $this->processContext('data'),
+                    'files' => $this->processContext('files'),
+                    'headers' => $this->processContext('headers'),
+                    'session' => $this->processContext('session'),
+                ]),
+                'extra' => $this->processExtra(),
+            ]
+        );
+
+        return $record->withContext($context);
     }
 
     /**
@@ -51,12 +59,14 @@ class RequestDataProcessor
         if (false !== $config) {
             $context = $this->{'get' . ucfirst($name)}();
 
-            if (array_get($config, 'except')) {
-                return array_except($context, array_get($config, 'except'));
+            if (isset($config['except']) && is_array($config['except'])) {
+                $exceptKeys = $config['except'];
+                $context = array_diff_key($context, array_flip($exceptKeys));
             }
-
-            if (array_get($config, 'only')) {
-                return array_only($context, array_get($config, 'only'));
+        
+            if (isset($config['only']) && is_array($config['only'])) {
+                $onlyKeys = $config['only'];
+                $context = array_intersect_key($context, array_flip($onlyKeys));
             }
 
             return $context;
